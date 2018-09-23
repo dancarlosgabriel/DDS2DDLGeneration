@@ -1,0 +1,425 @@
+/***************************************************************************/
+/**   Src Name    : GENDDLDRVR                                             */
+/**   Description : Gen SQL DDL from DDS Driver                            */
+/**                                                                        */
+/**                                   Author : Reynaldo Dandreb M. Medilla */
+/***************************************************************************/
+
+Pgm  Parm( &ObjLib &SrcPF &SrcLib &DDLObjLib &CustomCode &SkipGenObj )
+
+/* **************************************************************************/
+/* Var definitions                                                          */
+/* **************************************************************************/
+
+Dcl Var(&ObjNam) Type(*Char) Len(10)
+Dcl Var(&ObjLib) Type(*Char) Len(10)
+Dcl Var(&RefLib) Type(*Char) Len(10)
+Dcl Var(&SrcPF) Type(*Char) Len(10)
+Dcl Var(&SrcLib) Type(*Char) Len(10)
+Dcl Var(&SrcNam) Type(*Char) Len(10)
+Dcl Var(&DDLTyp) Type(*Char) Len(10)
+Dcl Var(&DDLObjLib) Type(*Char) Len(10)
+Dcl Var(&Okay) Type(*LGL) Value('1')
+Dcl Var(&ConvFailed) Type(*Char) Len(1)
+Dcl Var(&CrtFailed) Type(*Char) Len(1)
+Dcl Var(&SkipLog) Type(*Char) Len(1)
+Dcl Var(&SkipGenObj) Type(*Char) Len(1)
+Dcl Var(&CloseOpen) Type(*LGL)
+Dcl Var(&SkipObj) Type(*LGL)
+Dcl Var(&CustomCode) Type(*Char) Len(20)
+Dcl Var(&SpecificF) Type(*Char) Len(10)
+Dcl Var(&SpecificA) Type(*Char) Len(10)
+Dcl Var(&FilterFlag) Type(*Char) Len(1)
+Dcl Var(&ItIsFound) Type(*Char) Len(1)
+Dcl Var(&GenDepErr) Type(*Char) Len(1)
+Dcl Var(&ObjAttr) Type(*Char) Len(2)
+Dcl Var(&KeyFlds) Type(*Char) Len(23)
+   Dcl Var(&SubFlg) Type(*Char) Stg(*DEFINED) Len(1) Defvar(&KeyFlds 1)
+   Dcl Var(&SubLib) Type(*Char) Stg(*DEFINED) Len(10) Defvar(&KeyFlds 2)
+   Dcl Var(&SubObj) Type(*Char) Stg(*DEFINED) Len(10) Defvar(&KeyFlds 12)
+   Dcl Var(&SubAtr) Type(*Char) Stg(*DEFINED) Len(2) Defvar(&KeyFlds 22)
+
+DCLF       FILE(QADBXREF) OPNID(FIL1) ALWVARLEN(*YES) ALWNULL(*YES) +
+                          ALWGRAPHIC(*YES)
+
+DCLF       FILE(GENFILTER) OPNID(FIL2) ALWNULL(*YES)
+
+/* **********************************************************************/
+/*  Program Logic                                                       */
+/* **********************************************************************/
+
+Select
+   When Cond(&CustomCode *EQ 'CUSTOM-RUN') Then(CallSubr Subr(CustomRun))
+   When Cond(%Sst(&CustomCode 1 5) *EQ 'FILE=') Then(CallSubr Subr(SpecificR))
+   Otherwise Cmd(CallSubr Subr(srMain))
+EndSelect
+
+CallSubr Subr(srEndPgm)
+
+/* **********************************************************************/
+/* Main routine                                                         */
+/* **********************************************************************/
+Subr       SUBR(srMain)
+
+   /* do validations and abort if error is detected */
+   CallSubr Subr(srValn)
+
+   /* - qadbxref pre-filters  - */
+   OVRDBF     FILE(QADBXREF) TOFILE(QADBXREF) MBR(*FIRST) +
+              OVRSCOPE(*JOB) SHARE(*YES)
+
+   OPNQRYF    FILE((QADBXREF *FIRST *ONLY)) +
+                   QRYSLT('(DBXTYP="D") *and (DBXLIB= "' || +
+                           &OBJLIB || '")') OPTIMIZE(*MINWAIT)
+
+   CHGVAR     VAR(&CloseOpen) VALUE('1')
+   /* -                           - */
+
+   /* Process valid objects in the specified Lib for DDS to DDL conversion */
+   DoWhile Cond( &Okay )
+      RCVF       OPNID(FIL1)
+         MONMSG     MSGID(CPF0864) EXEC(LEAVE)
+         MONMSG     MSGID(CPF5029)
+
+      IF         COND(&FIL1_DBXATR *EQ 'PF' *OR &FIL1_DBXATR *EQ 'TB' +
+                          *OR &FIL1_DBXATR *EQ 'IX' *OR &FIL1_DBXATR *EQ +
+                          'VW' *OR &FIL1_DBXATR *EQ 'LF' ) THEN(DO)
+            /* good to carry on */
+        ENDDO
+      ELSE       CMD(ITERATE)
+
+      /* - further qadbxref filtering  - */
+      IF  COND(&FIL1_DBXLIB *NE &OBJLIB *OR &FIL1_DBXTYP *NE 'D') THEN(ITERATE)
+
+      /* - only wanted PFs - */
+      IF  Cond(&CustomCode *EQ 'PF-ONLY' *AND &FIL1_DBXATR *NE 'PF') THEN(ITERATE)
+
+      CallSubr   SUBR(FilterObj)
+      IF         COND(&SkipObj) THEN(ITERATE)
+
+      CHGVAR     VAR(&REFLIB) VALUE(&FIL1_DBXLIB)
+      CHGVAR     VAR(&OBJNAM) VALUE(&FIL1_DBXFIL)
+      CHGVAR     VAR(&SRCNAM) VALUE(&FIL1_DBXFIL)
+      CHGVAR     VAR(&OBJATTR) VALUE(&FIL1_DBXATR)
+
+      /* tgt DDL OBJ lib different from obj actual lib? */
+      CALLSubr   SUBR(IsDiffTgtL)
+
+      /* run the conversion */
+      CALLSubr   SUBR(srDDS2DDL)
+
+   Enddo
+
+EndSubr
+/* **********************************************************************/
+/* Is Target Lib Different from Obj-Lib                                 */
+/* **********************************************************************/
+Subr       SUBR(IsDiffTgtL)
+
+   If Cond(&DDLObjLib *NE ' ' *AND &DDLObjLib *NE &ObjLib) Then(Do)
+
+      /* this option allows DDL src to be in different Lib we wanted the obj to be into.      */
+      /* data into new lib is out of scope now so we dont copy it, we just need sql defn/attr.*/
+
+      CHGVAR     VAR(&REFLIB) VALUE(&DDLOBJLIB)
+      CHKOBJ     OBJ(&REFLIB/&OBJNAM) OBJTYPE(*FILE)
+          MONMSG     MSGID(CPF9801) EXEC(DO)
+             CRTDUPOBJ  OBJ(&OBJNAM) FROMLIB(&OBJLIB) OBJTYPE(*FILE) +
+                        TOLIB(&REFLIB)
+
+             /* for PFs/Tables attempt to copy depedent files along  */
+             /* NOTE when PF is re-created as SQL-table, native dependent LFs fail at crtdupobj */
+
+             If Cond(&ObjAttr = 'PF' *OR &ObjAttr = 'TB') Then(Do)
+               /* skip this as designed */
+             IF         COND((&CUSTOMCODE *EQ 'PF-ONLY') *OR +
+                          (%SST(&CUSTOMCODE 1 5) *EQ 'FILE=')) +
+                          THEN(GOTO CMDLBL(ENDISDIFF))
+
+               CALL  PGM(GenDepFils) PARM(&OBJLIB &OBJNAM &REFLIB &GENDEPERR)
+             Enddo
+          ENDDO
+   Enddo
+
+ ENDISDIFF:  EndSubr
+/* **********************************************************************/
+/* Custom Run Logic                                                     */
+/*   input data comes from GENFILTER with ffilter = 'I'                 */
+/* **********************************************************************/
+Subr       SUBR(CustomRun)
+
+   /* do validations and abort if error is detected */
+   CallSubr Subr(srValn)
+
+   /* filter key */
+   CHGVAR     VAR(&FilterFlag) Value('I')
+
+   OVRDBF     FILE(GENFILTER) POSITION(*KEY 1 *N &FILTERFLAG) SECURE(*YES)
+
+   DoWhile Cond( &Okay )
+      RCVF       OPNID(FIL2)
+         MONMSG  MSGID(CPF0864 CPF4137) EXEC(LEAVE)
+
+      /* - further filtering  - */
+      IF  COND(&FIL2_FFILTER *NE 'I') THEN(ITERATE)
+
+      CHGVAR     VAR(&REFLIB) VALUE(&FIL2_FOBJLIB)
+      CHGVAR     VAR(&OBJLIB) VALUE(&FIL2_FOBJLIB)
+      CHGVAR     VAR(&OBJNAM) VALUE(&FIL2_FOBJNAM)
+      CHGVAR     VAR(&SRCNAM) VALUE(&FIL2_FOBJNAM)
+      CHGVAR     VAR(&OBJATTR) VALUE(&FIL2_FOBJATR)
+
+      /* tgt DDL OBJ lib different from obj actual lib? */
+      CALLSubr   SUBR(IsDiffTgtL)
+
+      /* run the conversion */
+      CALLSubr   SUBR(srDDS2DDL)
+
+   Enddo
+
+   DLTOVR     FILE(GENFILTER)
+      MONMSG CPF0000
+
+EndSubr
+/* **********************************************************************/
+/* Specific 'file' Run Logic                                            */
+/*   this is for CustomCode='FILE=xxx'                                  */
+/* **********************************************************************/
+Subr       SUBR(SpecificR)
+
+   /* do validations and abort if error is detected */
+   CallSubr Subr(srValn)
+
+   CHGVAR     VAR(&SpecificF) Value(%Sst(&CustomCode 6 10))
+   RTVOBJD    OBJ(&OBJLIB/&SPECIFICF) OBJTYPE(*FILE) +
+              OBJATR(&SPECIFICA)
+
+   CHGVAR     VAR(&REFLIB) VALUE(&OBJLIB)
+   CHGVAR     VAR(&OBJNAM) VALUE(&SpecificF)
+   CHGVAR     VAR(&SRCNAM) VALUE(&SpecificF)
+   CHGVAR     VAR(&OBJATTR) VALUE(%Sst(&SpecificA 1 2))
+
+   /* tgt DDL OBJ lib different from obj actual lib? */
+   CALLSubr   SUBR(IsDiffTgtL)
+
+   /* run the conversion */
+   CALLSubr   SUBR(srDDS2DDL)
+
+EndSubr
+/* **********************************************************************/
+/* Do Object Filtering                                                  */
+/* **********************************************************************/
+Subr       SUBR(FilterObj)
+
+   CALL       PGM(GENFLTROBJ) PARM('E' &FIL1_DBXLIB +
+                       &FIL1_DBXFIL &FIL1_DBXATR &ItIsFound)
+
+   /* filter keys found? */
+   IF         COND(&ItIsFound = 'Y') THEN(CHGVAR VAR(&SKIPOBJ) VALUE('1'))
+   IF         COND(&ItIsFound *NE 'Y') THEN(CHGVAR VAR(&SKIPOBJ) VALUE('0'))
+
+   /* skip following logic as it doesnt work consistently/not reliable */
+   GOTO       CMDLBL(ENDFILTER)
+
+   /* inz  */
+   CHGVAR     VAR(&SKIPOBJ) VALUE('1')
+   CHGVAR     VAR(&FIL2_FFILTER) VALUE(' ')
+
+   /* excluded keys */
+   CHGVAR     VAR(&SUBFLG) VALUE('E')
+   CHGVAR     VAR(&SUBLIB) VALUE(&FIL1_DBXLIB)
+   CHGVAR     VAR(&SUBOBJ) VALUE(&FIL1_DBXFIL)
+   CHGVAR     VAR(&SUBATR) VALUE(&FIL1_DBXATR)
+
+   OVRDBF FILE(GENFILTER) +
+                POSITION(*KEY 4 *N &KEYFLDS) SECURE(*YES)
+
+   RCVF       OPNID(FIL2)
+      MONMSG     MSGID(CPF0864 CPF4137) EXEC(DO)
+         CHGVAR VAR(&SKIPOBJ) VALUE('0')
+      ENDDO
+
+   /* double confirm */
+   IF         COND((&FIL1_DBXLIB *EQ &FIL2_FOBJLIB) *AND +
+                   (&FIL1_DBXFIL *EQ &FIL2_FOBJNAM) *AND +
+                   (&FIL2_FFILTER *EQ 'E') ) THEN(DO)
+      CHGVAR     VAR(&SKIPOBJ) VALUE('1')
+   ENDDO
+
+   DLTOVR     FILE(GENFILTER)
+      MONMSG CPF0000
+
+ ENDFILTER:  EndSubr
+/* **********************************************************************/
+/* DDS to DDL conversion                                                */
+/* **********************************************************************/
+Subr       SUBR(srDDS2DDL)
+
+   CHGVAR     VAR(&DDLTyp) VALUE(' ')
+
+   /* for existing PF or Table */
+   If Cond(&ObjAttr *EQ 'PF' *OR &ObjAttr *EQ 'TB') Then(Do)
+      CHGVAR     VAR(&DDLTyp) VALUE('TABLE')
+   Enddo
+
+   /* for existing Index */
+   If Cond(&ObjAttr *EQ 'IX') Then(Do)
+      CHGVAR     VAR(&DDLTyp) VALUE('INDEX')
+   Enddo
+
+   /* for existing View  */
+   If Cond(&ObjAttr *EQ 'VW') Then(Do)
+      CHGVAR     VAR(&DDLTyp) VALUE('VIEW')
+   Enddo
+
+   /* for existing LFs */
+   If Cond(&ObjAttr *EQ 'LF') Then(Do)
+      /* we wanted it now to be sql-View */
+      CHGVAR     VAR(&DDLTyp) VALUE('LF2VIEW')
+
+      /* if we decide to make it sql-View plus index unmment below */
+      /* Warning: use this option only for src-generation ONLY.    */
+      /* CHGVAR     VAR(&DDLTyp) VALUE('LF2VIEW@IX') */
+
+      /* if we decide to make it sql-Index then uncomment below */
+      /* CHGVAR     VAR(&DDLTyp) VALUE('LF2INDEX') */
+   Enddo
+
+   /* IBM's generate_sql expects srcmbr to be there, so dont error and crt it */
+   CHKOBJ     OBJ(&SRCLIB/&SRCPF) OBJTYPE(*FILE) MBR(&SRCNAM)
+      MONMSG     MSGID(CPF9815) EXEC(DO)
+         ADDPFM     FILE(&SRCLIB/&SRCPF) MBR(&SRCNAM) +
+                    TEXT('DDL-temp-src') SRCTYPE(DDL)
+      ENDDO
+
+   CHGVAR     VAR(&ConvFailed) VALUE('N')
+
+   CALL       PGM(GENDDLSRC) PARM(&DDLTYP &OBJNAM +
+                           &REFLIB &SRCPF &SRCLIB &SRCNAM &ConvFailed &SkipLog)
+
+   IF         COND(&ConvFailed = 'Y') THEN(DO)
+      /* generation failed, anything here */
+      ENDDO
+   ELSE       CMD(CallSubr Subr(srCrtObj))
+
+EndSubr
+/* **********************************************************************/
+/* Create SQL object from DDL                                           */
+/* **********************************************************************/
+Subr       SUBR(srCrtObj)
+
+   IF         COND(&SKIPGENOBJ = 'Y') THEN(GOTO CMDLBL(SKIPCRT))
+
+   CHGVAR     VAR(&CrtFailed) VALUE('N')
+
+   CALL       PGM(GENDDLOBJ) PARM(&DDLTYP &OBJNAM &REFLIB +
+                             &SRCPF &SRCLIB &SRCNAM &CrtFailed &SkipLog)
+
+   IF         COND(&CrtFailed = 'Y') THEN(DO)
+      /* creation failed, do anything here */
+   ENDDO
+
+ SKIPCRT:    EndSubr
+/* **********************************************************************/
+/* Validation routine                                                   */
+/* **********************************************************************/
+Subr       SUBR(srValn)
+
+   /* required parms are req'd */
+   IF         COND(&OBJLIB = ' ' *OR &SRCPF = ' ' *OR +
+                   &SRCLIB = ' ') THEN(DO)
+      SNDPGMMSG  MSG('ERROR!, Required parameters must be +
+                   passed.  Processing Aborted.')
+      CALLSUBR   SUBR(SRENDPGM)
+   ENDDO
+
+   /* validate passed obj lib */
+   IF         COND(&OBJLIB *NE ' ') THEN(DO)
+      CHKOBJ     OBJ(&OBJLIB) OBJTYPE(*LIB)
+        MONMSG     MSGID(CPF9801) EXEC(DO)
+          SNDPGMMSG  MSG('ERROR!, Object Library entry does +
+                   not exist.  Processing Aborted.')
+          CALLSUBR   SUBR(SRENDPGM)
+        ENDDO
+   ENDDO
+
+   /* validate passed srclib and srcPF */
+   IF         COND(&SRCLIB *NE ' ') THEN(DO)
+      CHKOBJ     OBJ(&SRCLIB) OBJTYPE(*LIB)
+        MONMSG     MSGID(CPF9801) EXEC(DO)
+          /* hope it exists but if not */
+          /* let's be smarter, dont error and create it */
+          CRTLIB     LIB(&SRCLIB) TEXT('DDL source lib')
+
+      /*  SNDPGMMSG  MSG('ERROR!, DDL Source Library parameter does +
+                   not exist.  Processing Aborted.')                        +
+          CALLSUBR   SUBR(SRENDPGM)                                         */
+        ENDDO
+   ENDDO
+
+   IF         COND(&SRCPF *NE ' ') THEN(DO)
+      CHKOBJ     OBJ(&SRCLIB/&SRCPF) OBJTYPE(*FILE)
+        MONMSG     MSGID(CPF9801) EXEC(DO)
+          /* hope it exists but if not */
+          /* let's be smarter, dont error and create it */
+             CRTSRCPF   FILE(&SRCLIB/&SRCPF) RCDLEN(112) TEXT('DDL source PF')
+
+      /*  SNDPGMMSG  MSG('ERROR!, DDL Source PF parameter does +
+                   not exist.  Processing Aborted.')                 +
+          CALLSUBR   SUBR(SRENDPGM)                                  */
+        ENDDO
+   ENDDO
+
+   /* validate target DDL Object Lib */
+   IF         COND(&DDLOBJLIB *NE ' ' *AND &DDLOBJLIB *NE &OBJLIB) THEN(DO)
+      CHKOBJ     OBJ(&DDLOBJLIB) OBJTYPE(*LIB)
+        MONMSG     MSGID(CPF9801) EXEC(DO)
+          /* hope it exists but if not */
+          /* let's be smarter, dont error and create it */
+          CRTLIB     LIB(&DDLOBJLIB) TEXT('SQL DDL-object lib')
+
+      /*  SNDPGMMSG  MSG('ERROR!, Target SQL Object Library parameter does +
+                   not exist.  Processing Aborted.')                          +
+          CALLSUBR   SUBR(SRENDPGM)                                           */
+        ENDDO
+   ENDDO
+
+   /* validate Customcode value */
+   IF         COND(&CUSTOMCODE *NE ' ') THEN(DO)
+      IF         COND((%SST(&CUSTOMCODE 1 5) *NE 'FILE=') +
+                   *AND (&CUSTOMCODE *NE 'CUSTOM-RUN') *AND +
+                   (&CUSTOMCODE *NE 'PF-ONLY')) THEN(DO)
+          SNDPGMMSG  MSG('ERROR!, Pre-defined Code entry is invalid.  +
+                     Processing Aborted.')
+          CALLSUBR   SUBR(SRENDPGM)
+      ENDDO
+
+      IF         COND(%SST(&CUSTOMCODE 1 5) *EQ 'FILE=') THEN(DO)
+         /* ensure specific file is valid */
+         CHGVAR     VAR(&SpecificF) Value(%Sst(&CustomCode 6 10))
+         CHKOBJ     OBJ(&OBJLIB/&SPECIFICF) OBJTYPE(*FILE)
+            MONMSG     MSGID(CPF9801) EXEC(DO)
+               SNDPGMMSG  MSG('ERROR!, Specific File entry does +
+                        not exist.  Processing Aborted.')
+               CALLSUBR   SUBR(SRENDPGM)
+            ENDDO
+      ENDDO
+   ENDDO
+
+EndSubr
+/* **********************************************************************/
+/* terminal logic                                                       */
+/* **********************************************************************/
+Subr       SUBR(srEndPgm)
+
+   IF         COND(&CloseOpen) THEN(DO)
+      CLOF       OPNID(QADBXREF)
+        MonMsg CPF0000
+      DLTOVR     FILE(QADBXREF) LVL(*JOB)
+        MonMsg CPF0000
+   Enddo
+
+   Return
+
+EndSubr
+
