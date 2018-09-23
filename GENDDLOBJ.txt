@@ -1,0 +1,90 @@
+/***************************************************************************/
+/**   Src Name    : GENDDLOBJ                                              */
+/**   Description : Gen SQL DDL from DDS Object Creation                   */
+/**                                                                        */
+/**                                   Author : Reynaldo Dandreb M. Medilla */
+/***************************************************************************/
+
+Pgm  Parm( &DDLTyp &TgtObj &TgtLib &SrcPF &SrcLib &SrcNam &CrtFailed &SkipLog)
+
+/* **************************************************************************/
+/* Var definitions                                                          */
+/* **************************************************************************/
+
+Dcl Var(&DDLTyp) Type(*Char) Len(10)
+Dcl Var(&TgtObj) Type(*Char) Len(10)
+Dcl Var(&TgtLib) Type(*Char) Len(10)
+Dcl Var(&SrcPF) Type(*Char) Len(10)
+Dcl Var(&SrcLib) Type(*Char) Len(10)
+Dcl Var(&SrcNam) Type(*Char) Len(10)
+Dcl Var(&CrtFailed) Type(*Char) Len(1)
+Dcl Var(&SkipLog) Type(*Char) Len(1)
+Dcl Var(&GENOBJOK) Type(*Char) Len(1)
+Dcl Var(&LogMsg) Type(*Char) Len(100)
+
+/* **********************************************************************/
+/*  Program Logic                                                       */
+/* **********************************************************************/
+
+CallSubr Subr(srMain)
+
+CallSubr Subr(srEndPgm)
+
+/* **********************************************************************/
+/* Main routine                                                         */
+/* **********************************************************************/
+Subr       SUBR(srMain)
+
+   /* dont do this if not passed or not for index */
+   IF COND(&TgtObj *NE ' ') THEN(DO)
+   /* may not need this                                           +
+      IF COND(&DDLTYP = 'INDEX' *OR &DDLTYP = 'VIEW') THEN(DO)    +
+         DLTF  FILE(&TgtLib/&TgtObj)                              +
+            MONMSG CPF0000                                        +
+      ENDDO                                                       */
+   ENDDO
+
+   /* run DDL src to crt sql object */
+   RUNSQLSTM SRCFILE(&SRCLIB/&SRCPF) SRCMBR(&SRCNAM) COMMIT(*NONE) MARGINS(100)
+      MONMSG     MSGID(CPF0000) EXEC(DO)
+         CHGVAR VAR(&CRTFAILED) VALUE('Y')
+      ENDDO
+
+   CallSubr Subr(PerformLog)
+
+EndSubr
+/* **********************************************************************/
+/* Peform process log                                                   */
+/* **********************************************************************/
+Subr       SUBR(PerformLog)
+
+   IF COND(&SkipLog *NE 'Y') THEN(DO)
+
+      IF COND(&CrtFailed *EQ 'Y') THEN(DO)
+         CHGVAR     VAR(&GENOBJOK) VALUE('N')
+         CHGVAR     VAR(&LOGMSG) VALUE('An error occurred during +
+                          SQL Object creation, please see the +
+                          job logs.')
+        ENDDO
+      ELSE       CMD(DO)
+         CHGVAR     VAR(&GENOBJOK) VALUE('Y')
+         CHGVAR     VAR(&LOGMSG) VALUE('SQL Object creation +
+                          process completed successfully.')
+      ENDDO
+
+      CALL       PGM(GENDDLLOG) PARM('GENDDLOBJ' &TGTOBJ +
+                          &TGTLIB &SRCPF &SRCLIB &SRCNAM +
+                          ' ' &GENOBJOK &LOGMSG)
+
+   ENDDO
+
+EndSubr
+/* **********************************************************************/
+/* terminal logic                                                       */
+/* **********************************************************************/
+Subr       SUBR(srEndPgm)
+
+   Return
+
+EndSubr
+
