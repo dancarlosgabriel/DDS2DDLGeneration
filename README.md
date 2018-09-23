@@ -17,3 +17,5 @@ Parameter Rules :
 "FILE={XXX}"  - pass this value if you want the run for specific file, replace XXX with the specific file that you desired, it must be a valid object PF or LF in the library specified in ObjLib.  Note that for LF object, ensure that dependent-on PF exists in the target library if Object creation is chosen (ie parm SkipGenObj <> 'Y')
 "PF-ONLY" - pass this value if you want the run to only generate DDL for PF-objects only that's present in specified library in ObjLib (ie excluding existing LFs, Views, Index objects). 
 - SkipGenObj(1A) - optional, can be blank, a value of 'Y' would mean to skip the process 	 of creating the SQL object from the generated DDL source.   
+
+By the way, just want to mention my appreciation to these people whose articles have been very useful to me during my development of this utility: Scott Klement, Jon Paris, Barbara Morris, Bob Cozzi, Simon Hutchinson, David Andruchuk, Birgitta Hauser. 
