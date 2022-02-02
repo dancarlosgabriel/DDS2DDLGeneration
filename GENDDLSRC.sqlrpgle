@@ -177,4 +177,4 @@ Dcl-proc BldSqlStmt;
 
    Return SQLStmt;
 End-proc;
-
+

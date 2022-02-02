@@ -8,7 +8,6 @@ Generate DDL from DDS - Help
 optionally conversion of existing physical files in DDS format into SQL DDL source
 and object.
 :ul.
-:li.
 :li.Physical files are converted into SQL tables.
 :li.Logical files are converted into SQL views or indexes.
 :li.Keyed logical files and join logical files with select/omit constraints are 
