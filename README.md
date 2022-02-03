@@ -1,4 +1,28 @@
-Utility Features : 
+# DDS2DDLGeneration: Convert DDS-based files to SQL DDL
+
+## Requirements for building from Git Repo
+- IBM i operating system 7.3 or higher (57xx-SS1 opt base,1,3)
+- ILE RPG compiler (57xx-WDS opt 31)
+- QShell (57xx-SS1 opt 30)
+- PASE (57xx-SS1 opt 33)
+- YUM https://tinyurl.com/ibmiyum
+- GNU Make (`yum install make-gnu`)
+- Git (`yum install git`)
+
+## To Build with GNU Make
+- it is assumed that you have installed the above requirements, and have the yum packages directory in your path
+- it is assumed that you are logged on and at a PASE shell
+- clone this repo (you may use the following command, or whichever method you prefer 
+```
+git clone https://github.com/dancarlosgabriel/DDS2DDLGeneration.git
+``` 
+- run `make` to build the repo. There is a LIBRARY parameter to specify the library you'd like to build into. For example to build into the DDS2DDL library:
+```
+make LIBRRARY=dds2ddl
+``` 
+- there are more detailed instructions in the comments at the top of the `Makefile`
+
+## Utility Features
 - Enables automatic generation and optionally conversion of existing IBMi PF files in DDS form into SQL DDL source and object.  PF-files are converted into SQL-table, LF-files into SQL Views, Index.  Keyed Files, Join Files and Files with select/omit constraints are handled automatically.
 - With option to generate DDL source and object from a single file, or from list of files, or from all files of a given library, or from PF-objects only (LF's excluded).  Pre-defined 'Custom-Codes' are provided to allow that.  See parameter rules below.
 - With option to 'filter' or exclude files from the specified library, by entering the file names to exclude in file GENFILTER having FFILTER = 'E' (for exclude). This filtering is not applied on custom-run.
@@ -7,7 +31,7 @@ Utility Features :
 - Optional parameter/s is provided for the ability to (or not to) generate SQL object from the generated DDL source.  Meaning, you can opt to just generate SQL DDL source alone.
 - Audit logs are created in GENLOGPF file during SQL DDL source creation and Object creation.  The logs can be useful for point-of-failure investigation and quick query reporting. 
 
-Parameters and its Rules : 
+## Parameters and its Rules
 - ObjLib(10A) - required, valid Library name must be passed.  This is the Library containing the files to convert from DDS into SQL DDL. 
 - SrcPF(10A) - required, any or non-existing name can be passed.  Non-existing name will be created automatically.  This is the target source-PF to store the generated DDL. 
 - SrcLib(10A) - required, any or non-existing name can be passed.  Non-existing name will be created automatically.  This is the target library to store the generated DDL src.

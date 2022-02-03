@@ -1,0 +1,212 @@
+:pnlgrp.
+.************************************************************************
+.*  Help for command GENDDLCMD
+.************************************************************************
+:help name='GENDDLCMD'.
+Generate DDL from DDS - Help
+:p.The Generate DDL from DDS (GENDDLCMD) command enabled automatic generation and
+optionally conversion of existing physical files in DDS format into SQL DDL source
+and object.
+:ul.
+:li.Physical files are converted into SQL tables.
+:li.Logical files are converted into SQL views or indexes.
+:li.Keyed logical files and join logical files with select/omit constraints are 
+handled automatically.
+:eul.
+:p.Options are provided to generate DDL source and object from a single file, or 
+from list of files, or from all files of a given library, or from PF-objects only 
+(LF's excluded).  Pre-defined 'Custom-Codes' are provided to allow that.  See 
+parameter rules below.
+:p.With option to 'filter' or exclude files from the specified library, by entering
+ the file names to exclude in file GENFILTER having FFILTER = 'E' (for exclude). 
+ This filtering is not applied on custom-run.
+:p.With option to generate the SQL DDL source (and the object) into a nominated 
+library (or schema). Target library is created automatically if it does not exist.
+:p.With option to generate the DDL source into new or existing sourcePF and/or 
+library. The target sourcePF or Library will be created automatically if not 
+existing. 
+:p.Optional parameter(s) are provided for the ability to (or not to) generate SQL 
+object from the generated DDL source. Meaning, you can opt to just generate SQL
+DDL source alone.
+:p.Audit logs are created in GENLOGPF file during SQL DDL source creation and 
+Object creation. The logs can be useful for point-of-failure investigation and
+quick query reporting. 
+:p.:hp2.Restrictions::ehp2.
+:ul.
+:li.
+You must have *EXECUTE authority to the library containing the objects that
+were built with DDS source.
+:li.
+You must have *EXECUTE and *OBJOPR authority to the library where the objects
+are to be built from DDL source.
+:li.
+This command is not intended for use in a multi-threaded job.
+:eul.
+:ehelp.
+.*******************************************
+.*   Help for parameter OBJLIB
+.*******************************************
+:help name='GENDDLCMD/OBJLIB'.
+Object Lib to gen DDL src from (OBJLIB) - Help
+:xh3.Object Lib to gen DDL src from (OBJLIB)
+:p.This is the library containing the files to convert from DDS into
+SQL DDL.
+:p.This is a required parameter.
+:parml.
+:pt.:pv.name:epv.
+:pd.
+Specify the name of a library containing DDS-created objects.
+:eparml.
+:ehelp.
+.*******************************************
+.*   Help for parameter SRCPF
+.*******************************************
+:help name='GENDDLCMD/SRCPF'.
+Source PF for DDL source (SRCPF) - Help
+:xh3.Source PF for DDL source (SRCPF)
+:p.Specifies the name of the target source-PF to store the generated DDL.
+:p.This is a required parameter.
+:parml.
+:pt.:pv.name:epv.
+:pd.
+Specify the name of the source-PF. If the file does not exist, it will be
+created automatically.
+:eparml.
+:ehelp.
+.*******************************************
+.*   Help for parameter SRCLIB
+.*******************************************
+:help name='GENDDLCMD/SRCLIB'.
+Library for DDL source (SRCLIB) - Help
+:xh3.Library for DDL source (SRCLIB)
+:p.Specifies the name of the target library to stored the generated
+DDL source code.
+.* Describe the function provided by the parameter.
+:p.This is a required parameter.
+:parml.
+:pt.:pv.name:epv.
+:pd.
+Specify the name of a library. If it does not exist, it will be created
+automatically.
+.* Describe the function provided by the user-defined parameter value.
+:eparml.
+:ehelp.
+.*******************************************
+.*   Help for parameter DDLOBJLIB
+.*******************************************
+:help name='GENDDLCMD/DDLOBJLIB'.
+Target SQL Object Library (DDLOBJLIB) - Help
+:xh3.Target SQL Object Library (DDLOBJLIB)
+:p.Specifies the target library used in the DDL source and will be the
+target library of the SQL object if the optional object creation is requested
+(see the SKIPGENOBJ parameter.)
+:parml.
+:pt.:pv.name:epv.
+:pd.
+Specify the name of the target SQL object library. This parameter is optional
+if you do not wish to generate objects.
+:eparml.
+:ehelp.
+.*******************************************
+.*   Help for parameter CUSTOMCODE
+.*******************************************
+:help name='GENDDLCMD/CUSTOMCODE'.
+Valid Pre-defined Codes (CUSTOMCODE) - Help
+:xh3.Valid Pre-defined Codes (CUSTOMCODE)
+:p.Specifies pre-defined codes designed for specific purposes.
+:parml.
+:pt.:pk.'CUSTOM-RUN':epk.
+:pd.
+Pass this value if you want to generate DDL source from a selected/list of
+files (of any type) that's entered into the GENFILTER file with FFILTER='I'
+(for include.) It is recommended that you specify a library name from the
+GENFILTER file in the OBJLIB parameter as well.
+:pt.:pk.'FILE={XXX}':epk.
+:pd.
+Pass this value if you want to run for a specific file, and replace XXX
+with the specific file that you desire.  It must be a valid PF or LF name
+in the library specified in the OBJLIB parameter.  Note: For LF objects, 
+please ensure that the depended-on PF also exists in the target library if
+object creation is chosen (via setting the SKIPGENOBJ parameter to a value
+other than 'Y')
+:pt.:pk.'PF-ONLY':epk.
+:pd.
+Pass this value if you want the run to only generate only DDL for PF objects 
+that are present in the library specified by the OBJLIB parameter. (Excluding
+existing LFs, Views, and Index objects). 
+:eparml.
+:ehelp.
+.*******************************************
+.*   Help for parameter SKIPGENOBJ
+.*******************************************
+:help name='GENDDLCMD/SKIPGENOBJ'.
+Skip/Not skip SQL Obj creation (SKIPGENOBJ) - Help
+:xh3.Skip/Not skip SQL Obj creation (SKIPGENOBJ)
+:p.Specifies whether to skip the process of creating the SQL objects from
+the generated DDL source.
+.* Describe the function provided by the parameter.
+:parml.
+:pt.:pk def.Y:epk.
+:pd.
+The SQL objects will be skipped (not created.)
+:pt.:pk.N:epk.
+:pd.
+The SQL objects will be created.
+:eparml.
+:ehelp.
+.**************************************************
+.*
+.* Examples for GENDDLCMD
+.*
+.**************************************************
+:help name='GENDDLCMD/COMMAND/EXAMPLES'.
+Examples for GENDDLCMD - Help 
+:xh3.Examples for GENDDLCMD 
+:p.:hp2.Example 1: Simple Command Example:ehp2.  
+:xmp.
+GENDDLCMD OBJLIB(OLDFILELIB) SRCPF(QSQLSRC) SRCLIB(NEWSRCLIB) DDLOBJLIB(NEWFILELIB) SKIPGENOBJ(N)
+:exmp.
+:p.This command examines the files in OLDFILELIB and generates DDL for them in the
+NEWSRCLIB/QSQLSRC source file.  It builds the files into the NEWFILELIB library.
+:ehelp.
+.**************************************************
+.*
+.* Error messages for GENDDLCMD
+.*
+.**************************************************
+.*:help name='GENDDLCMD/ERROR/MESSAGES'.
+.*&msg(CPX0005,QCPFMSG). GENDDLCMD - Help
+.*:xh3.&msg(CPX0005,QCPFMSG). GENDDLCMD
+.*:p.:hp3.*ESCAPE &msg(CPX0006,QCPFMSG).:ehp3.
+.************************************************************************
+.* List the *ESCAPE, *STATUS, and *NOTIFY messages signalled from the command. 
+.* The following are generic messages defined in message file QCPFMSG. 
+.* Modify this list to match the list of error messages for the command. 
+.************************************************************************
+.*:DL COMPACT.
+.*:DT.CPF9801
+.*:DD.&MSG(CPF9801,QCPFMSG,*LIBL,nosub).
+.*:DT.CPF9802
+.*:DD.&MSG(CPF9802,QCPFMSG,*LIBL,nosub).
+.*:DT.CPF9803
+.*:DD.&MSG(CPF9803,QCPFMSG,*LIBL,nosub).
+.*:DT.CPF9807
+.*:DD.&MSG(CPF9807,QCPFMSG,*LIBL,nosub).
+.*:DT.CPF9808
+.*:DD.&MSG(CPF9808,QCPFMSG,*LIBL,nosub).
+.*:DT.CPF9810
+.*:DD.&MSG(CPF9810,QCPFMSG,*LIBL,nosub).
+.*:DT.CPF9811
+.*:DD.&MSG(CPF9811,QCPFMSG,*LIBL,nosub).
+.*:DT.CPF9812
+.*:DD.&MSG(CPF9812,QCPFMSG,*LIBL,nosub).
+.*:DT.CPF9820
+.*:DD.&MSG(CPF9820,QCPFMSG,*LIBL,nosub).
+.*:DT.CPF9830
+.*:DD.&MSG(CPF9830,QCPFMSG,*LIBL,nosub).
+.*:DT.CPF9899
+.*:DD.&MSG(CPF9899,QCPFMSG,*LIBL,nosub).
+.*:EDL.
+.*:ehelp.
+:epnlgrp.       
+  

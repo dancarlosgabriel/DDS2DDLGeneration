@@ -28,4 +28,4 @@
                           RSTD(*YES) DFT(Y) VALUES('Y' 'N') +
                           PROMPT('Skip/Not skip SQL Obj creation')
 
-
+
